@@ -51,8 +51,15 @@ trade-off for that.
 
 ## First install (once, on your PC)
 
+Easiest: run the standalone installer, which switches an existing
+regular Vencord install to this build (backup, download, enable both
+plugins, launch Discord):
+
+https://github.com/MLG-SERBUR/vencord-custom-installer/releases/latest/download/CustomVencordInstaller.exe
+
 The updater plugin only updates an existing install; it does not do the
-first inject. Do this once, from a Vencord checkout:
+first inject. The installer above does that first inject, or do it
+manually from a Vencord checkout:
 
 ```sh
 git clone https://github.com/Vendicated/Vencord
