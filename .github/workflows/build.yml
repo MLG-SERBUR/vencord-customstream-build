@@ -127,6 +127,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          # Changelog: upstream Vencord commits since the previous build's
+          # Vencord SHA (from its version.json). Falls back to the last 20
+          # commits on the first build or if the old SHA is not an ancestor.
+          # This is the release-notes equivalent of the stock updater's
+          # changelog tab; the builder repo itself has no Vencord history
+          # to compare against.
+          PREV_SHA=""
+          if gh release download latest -R MLG-SERBUR/vencord-customstream-build -p version.json -D /tmp/prev-version >/dev/null 2>&1; then
+            PREV_SHA=$(python3 -c "import json; print(json.load(open('/tmp/prev-version/version.json')).get('vencordSha', ''))" 2>/dev/null || true)
+          fi
+          CHANGELOG=""
+          if [ -n "$PREV_SHA" ]; then
+            CHANGELOG=$(git -C vencord log --format='- %h %s' "$PREV_SHA..HEAD" 2>/dev/null | head -50 || true)
+          fi
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG=$(git -C vencord log --format='- %h %s' -20)
+          fi
+          {
+            echo "Custom Vencord build $VERSION"
+            echo ""
+            echo "Vencord: $(git -C vencord rev-parse HEAD)"
+            echo "customStream: $(git -C vencord/src/userplugins/customStream rev-parse HEAD)"
+            echo "CustomUpdater: $(git -C vencord/src/userplugins/customUpdater.desktop rev-parse HEAD)"
+            echo ""
+            echo "Upstream Vencord changes since previous build:"
+            echo "$CHANGELOG"
+          } > /tmp/release-notes.md
           cd vencord/dist
           if gh release view latest -R MLG-SERBUR/vencord-customstream-build >/dev/null 2>&1; then
             gh release upload latest --clobber -R MLG-SERBUR/vencord-customstream-build \
@@ -136,7 +163,7 @@ jobs:
           else
             gh release create latest -R MLG-SERBUR/vencord-customstream-build \
               --title "Custom Vencord Build $VERSION" \
-              --notes "Vencord + customStream + CustomUpdater. See version.json for the exact SHAs." \
+              --notes-file /tmp/release-notes.md \
               patcher.js preload.js renderer.js renderer.css \
               vencordDesktopMain.js vencordDesktopPreload.js \
               vencordDesktopRenderer.js vencordDesktopRenderer.css
@@ -144,4 +171,4 @@ jobs:
           gh release upload latest --clobber -R MLG-SERBUR/vencord-customstream-build version.json
           gh release edit latest -R MLG-SERBUR/vencord-customstream-build \
             --title "Custom Vencord Build $VERSION" \
-            --notes "Vencord + customStream + CustomUpdater. See version.json for the exact SHAs."
+            --notes-file /tmp/release-notes.md

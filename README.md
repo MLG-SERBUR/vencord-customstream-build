@@ -32,6 +32,10 @@ Rolling release, tag `latest`, in this repo:
 - `vencordDesktopMain.js`, `vencordDesktopPreload.js`,
   `vencordDesktopRenderer.js`, `vencordDesktopRenderer.css` — Vesktop.
 
+Release notes carry the full SHAs plus the upstream Vencord commit list
+since the previous build, the release-notes equivalent of the stock
+updater's changelog tab.
+
 Dist files are uploaded first, `version.json` last, so CustomUpdater
 only sees a new version once every file for that version is in place.
 
