@@ -1,0 +1,144 @@
+name: Build custom Vencord
+
+# This repo holds no Vencord source of its own. The workflow clones
+# upstream Vencord plus the two userplugins, builds once, and publishes
+# the dist files as a rolling "latest" release that the CustomUpdater
+# plugin in the build downloads from.
+#
+# Triggers:
+# - daily schedule: picks up new upstream Vencord commits and new
+#   plugin commits without any manual step.
+# - workflow_dispatch: manual run from the Actions tab.
+# - push to this workflow file: a pin change in this file rebuilds.
+# There is deliberately no trigger on upstream/plugin pushes: this repo
+# does not own those repos, so it cannot receive their webhooks.
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: custom-vencord-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Vencord
+        uses: actions/checkout@v4
+        with:
+          repository: Vendicated/Vencord
+          ref: main
+          path: vencord
+
+      - name: Checkout customStream plugin
+        uses: actions/checkout@v4
+        with:
+          repository: MrTopQ/customStream-Vencord
+          ref: main
+          path: vencord/src/userplugins/customStream
+
+      - name: Checkout CustomUpdater plugin
+        uses: actions/checkout@v4
+        with:
+          repository: MLG-SERBUR/vencord-custom-updater
+          ref: main
+          path: vencord/src/userplugins/customUpdater.desktop
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: vencord/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: vencord
+        run: pnpm install --frozen-lockfile
+
+      # --standalone: universal build, not tied to the Linux runner's
+      # platform, so the same files run on Windows Discord desktop and
+      # Vesktop. --disable-updater: the stock updater is off entirely,
+      # so it can never replace this custom build with the official one.
+      # CustomUpdater (a plugin in this build) is the only updater.
+      - name: Build
+        working-directory: vencord
+        run: pnpm build --standalone --disable-updater
+
+      - name: Verify dist files
+        run: |
+          ls -l vencord/dist
+          for f in patcher.js preload.js renderer.js renderer.css \
+                   vencordDesktopMain.js vencordDesktopPreload.js \
+                   vencordDesktopRenderer.js vencordDesktopRenderer.css; do
+            test -f "vencord/dist/$f" || { echo "Missing dist/$f"; exit 1; }
+          done
+
+      - name: Write version.json
+        id: version
+        run: |
+          VENCORD_SHA=$(git -C vencord rev-parse HEAD)
+          PLUGIN_SHA=$(git -C vencord/src/userplugins/customStream rev-parse HEAD)
+          UPDATER_SHA=$(git -C vencord/src/userplugins/customUpdater.desktop rev-parse HEAD)
+          VERSION="$(git -C vencord rev-parse --short HEAD)-$(git -C vencord/src/userplugins/customStream rev-parse --short HEAD)-$(git -C vencord/src/userplugins/customUpdater.desktop rev-parse --short HEAD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          python3 - "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" "$VERSION" <<'PYEOF'
+          import json, sys, datetime
+          vencord_sha, plugin_sha, updater_sha, version = sys.argv[1:5]
+          data = {
+              "version": version,
+              "vencordSha": vencord_sha,
+              "pluginSha": plugin_sha,
+              "updaterSha": updater_sha,
+              "builtAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "files": [
+                  "patcher.js", "preload.js", "renderer.js", "renderer.css",
+                  "vencordDesktopMain.js", "vencordDesktopPreload.js",
+                  "vencordDesktopRenderer.js", "vencordDesktopRenderer.css",
+              ],
+          }
+          with open("vencord/dist/version.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, indent=2)
+              f.write("\n")
+          print(json.dumps(data, indent=2))
+          PYEOF
+
+      # Dist files first, version.json last: CustomUpdater only acts
+      # once it sees a new version in version.json, so by then every
+      # dist file for that version is already uploaded.
+      - name: Publish rolling latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd vencord/dist
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest --clobber \
+              patcher.js preload.js renderer.js renderer.css \
+              vencordDesktopMain.js vencordDesktopPreload.js \
+              vencordDesktopRenderer.js vencordDesktopRenderer.css
+          else
+            gh release create latest \
+              --title "Custom Vencord Build $VERSION" \
+              --notes "Vencord + customStream + CustomUpdater. See version.json for the exact SHAs." \
+              patcher.js preload.js renderer.js renderer.css \
+              vencordDesktopMain.js vencordDesktopPreload.js \
+              vencordDesktopRenderer.js vencordDesktopRenderer.css
+          fi
+          gh release upload latest --clobber version.json
+          gh release edit latest \
+            --title "Custom Vencord Build $VERSION" \
+            --notes "Vencord + customStream + CustomUpdater. See version.json for the exact SHAs."
