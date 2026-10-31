@@ -119,26 +119,29 @@ jobs:
       # Dist files first, version.json last: CustomUpdater only acts
       # once it sees a new version in version.json, so by then every
       # dist file for that version is already uploaded.
+      # -R is required: the working directory is inside the Vencord
+      # checkout, so without it gh would target Vendicated/Vencord
+      # (the git remote in cwd) instead of this builder repo.
       - name: Publish rolling latest release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           cd vencord/dist
-          if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest --clobber \
+          if gh release view latest -R MLG-SERBUR/vencord-customstream-build >/dev/null 2>&1; then
+            gh release upload latest --clobber -R MLG-SERBUR/vencord-customstream-build \
               patcher.js preload.js renderer.js renderer.css \
               vencordDesktopMain.js vencordDesktopPreload.js \
               vencordDesktopRenderer.js vencordDesktopRenderer.css
           else
-            gh release create latest \
+            gh release create latest -R MLG-SERBUR/vencord-customstream-build \
               --title "Custom Vencord Build $VERSION" \
               --notes "Vencord + customStream + CustomUpdater. See version.json for the exact SHAs." \
               patcher.js preload.js renderer.js renderer.css \
               vencordDesktopMain.js vencordDesktopPreload.js \
               vencordDesktopRenderer.js vencordDesktopRenderer.css
           fi
-          gh release upload latest --clobber version.json
-          gh release edit latest \
+          gh release upload latest --clobber -R MLG-SERBUR/vencord-customstream-build version.json
+          gh release edit latest -R MLG-SERBUR/vencord-customstream-build \
             --title "Custom Vencord Build $VERSION" \
             --notes "Vencord + customStream + CustomUpdater. See version.json for the exact SHAs."
