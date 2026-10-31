@@ -26,8 +26,9 @@ Rolling release, tag `latest`, in this repo:
 - `version.json` — `version` is
   `<vencordShort>-<customStreamShort>-<updaterShort>`, plus the full SHAs
   and the build time. The version only changes when one of the three
-  inputs changes, so a daily rebuild with no upstream change is skipped
-  by the updater instead of re-downloaded.
+  inputs changes, so a scheduled run with no upstream change is skipped
+  by the builder itself (see Triggers) and would also be skipped by the
+  updater instead of re-downloaded if it were published.
 - `patcher.js`, `preload.js`, `renderer.js`, `renderer.css` — Discord desktop.
 - `vencordDesktopMain.js`, `vencordDesktopPreload.js`,
   `vencordDesktopRenderer.js`, `vencordDesktopRenderer.css` — Vesktop.
@@ -42,6 +43,10 @@ only sees a new version once every file for that version is in place.
 ## Triggers
 
 - Daily schedule, 07:00 UTC — picks up upstream and plugin commits.
+  Skip-if-unchanged: the scheduled run first compares the three input
+  HEAD SHAs against the previous published `version.json`. If all
+  three are unchanged, it stops there — no build, no republish. Manual
+  and workflow-push runs always build; they are not skipped.
 - Manual: Actions tab > Build custom Vencord > Run workflow.
 - Push to the workflow file itself — a pin change rebuilds.
 

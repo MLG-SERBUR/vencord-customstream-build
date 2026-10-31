@@ -7,9 +7,14 @@ name: Build custom Vencord
 #
 # Triggers:
 # - daily schedule: picks up new upstream Vencord commits and new
-#   plugin commits without any manual step.
-# - workflow_dispatch: manual run from the Actions tab.
+#   plugin commits without any manual step. Skips the build entirely
+#   if the three input SHAs are unchanged since the previous published
+#   build (see the Check for changes step); no rebuild, no republish.
+# - workflow_dispatch: manual run from the Actions tab. Always builds;
+#   a dispatch is an explicit request, so it is not skipped.
 # - push to this workflow file: a pin change in this file rebuilds.
+#   Always builds; a workflow change itself is not in the SHA combo,
+#   so skipping on unchanged SHAs would never test the new workflow.
 # There is deliberately no trigger on upstream/plugin pushes: this repo
 # does not own those repos, so it cannot receive their webhooks.
 on:
@@ -32,7 +37,32 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # Schedule-only skip guard. Compares the three input HEAD SHAs
+      # (via ls-remote, no clones needed) against the previous published
+      # version.json. Unchanged => changed=false, and every later step
+      # is skipped, so a no-change day costs one short job, not a full
+      # build and republish. On non-schedule runs this step is skipped,
+      # its output is empty, and the later steps' != 'false' condition
+      # passes, so manual and workflow-push runs always build.
+      - name: Check for changes (schedule only)
+        id: check
+        if: github.event_name == 'schedule'
+        run: |
+          PREV_FILE=/tmp/prev-version.json
+          curl -sL https://github.com/MLG-SERBUR/vencord-customstream-build/releases/download/latest/version.json -o "$PREV_FILE" || true
+          VENCORD_SHA=$(git ls-remote https://github.com/Vendicated/Vencord.git HEAD | awk '{print $1}')
+          PLUGIN_SHA=$(git ls-remote https://github.com/MrTopQ/customStream-Vencord.git HEAD | awk '{print $1}')
+          UPDATER_SHA=$(git ls-remote https://github.com/MLG-SERBUR/vencord-custom-updater.git HEAD | awk '{print $1}')
+          echo "Current SHAs: $VENCORD_SHA $PLUGIN_SHA $UPDATER_SHA"
+          CHANGED=true
+          if [ -s "$PREV_FILE" ] && python3 -c "import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get('vencordSha') == sys.argv[2] and d.get('pluginSha') == sys.argv[3] and d.get('updaterSha') == sys.argv[4] else 1)" "$PREV_FILE" "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" 2>/dev/null; then
+            CHANGED=false
+          fi
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "Changed: $CHANGED"
+
       - name: Checkout Vencord
+        if: steps.check.outputs.changed != 'false'
         uses: actions/checkout@v4
         with:
           repository: Vendicated/Vencord
@@ -43,6 +73,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout customStream plugin
+        if: steps.check.outputs.changed != 'false'
         uses: actions/checkout@v4
         with:
           repository: MrTopQ/customStream-Vencord
@@ -50,6 +81,7 @@ jobs:
           path: vencord/src/userplugins/customStream
 
       - name: Checkout CustomUpdater plugin
+        if: steps.check.outputs.changed != 'false'
         uses: actions/checkout@v4
         with:
           repository: MLG-SERBUR/vencord-custom-updater
@@ -57,11 +89,13 @@ jobs:
           path: vencord/src/userplugins/customUpdater.desktop
 
       - name: Setup pnpm
+        if: steps.check.outputs.changed != 'false'
         uses: pnpm/action-setup@v4
         with:
           version: 12.15.0
 
       - name: Setup Node.js
+        if: steps.check.outputs.changed != 'false'
         uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -69,6 +103,7 @@ jobs:
           cache-dependency-path: vencord/pnpm-lock.yaml
 
       - name: Install dependencies
+        if: steps.check.outputs.changed != 'false'
         working-directory: vencord
         run: pnpm install --frozen-lockfile
 
@@ -78,10 +113,12 @@ jobs:
       # so it can never replace this custom build with the official one.
       # CustomUpdater (a plugin in this build) is the only updater.
       - name: Build
+        if: steps.check.outputs.changed != 'false'
         working-directory: vencord
         run: pnpm build --standalone --disable-updater
 
       - name: Verify dist files
+        if: steps.check.outputs.changed != 'false'
         run: |
           ls -l vencord/dist
           for f in patcher.js preload.js renderer.js renderer.css \
@@ -91,6 +128,7 @@ jobs:
           done
 
       - name: Write version.json
+        if: steps.check.outputs.changed != 'false'
         id: version
         run: |
           VENCORD_SHA=$(git -C vencord rev-parse HEAD)
@@ -126,6 +164,7 @@ jobs:
       # checkout, so without it gh would target Vendicated/Vencord
       # (the git remote in cwd) instead of this builder repo.
       - name: Publish rolling latest release
+        if: steps.check.outputs.changed != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -175,3 +214,7 @@ jobs:
           gh release edit latest -R MLG-SERBUR/vencord-customstream-build \
             --title "Custom Vencord Build $VERSION" \
             --notes-file /tmp/release-notes.md
+
+      - name: Skip notice (schedule, unchanged)
+        if: github.event_name == 'schedule' && steps.check.outputs.changed == 'false'
+        run: echo "No changes since previous build; skipped build and publish."
