@@ -38,6 +38,9 @@ jobs:
           repository: Vendicated/Vencord
           ref: main
           path: vencord
+          # Full history: the changelog step runs git log PREV_SHA..HEAD,
+          # which needs the previous build's commit, not just HEAD.
+          fetch-depth: 0
 
       - name: Checkout customStream plugin
         uses: actions/checkout@v4
