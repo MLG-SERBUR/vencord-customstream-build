@@ -51,11 +51,23 @@ trade-off for that.
 
 ## First install (once, on your PC)
 
-Easiest: run the standalone installer, which switches an existing
-regular Vencord install to this build (backup, download, enable both
-plugins, launch Discord):
+Recommended path, for fresh installs and for repairs: official
+Vencord installer first, custom installer second. The custom installer
+does not patch Discord itself; it only switches an existing regular
+Vencord install to this build. So:
+
+1. Install regular Vencord with the official Vencord installer.
+2. Launch Discord once and check Vencord settings appear.
+3. Quit Discord, then run the standalone installer, which switches
+   that install to this build (backup, download, enable both plugins,
+   launch Discord):
 
 https://github.com/MLG-SERBUR/vencord-custom-installer/releases/latest/download/CustomVencordInstaller.exe
+
+Repair is the same path: if Vencord disappeared after a Discord update,
+run the official installer again, verify regular Vencord works, then
+run the custom installer again. If only the custom build files are
+broken but Vencord still loads, just rerun the custom installer.
 
 The updater plugin only updates an existing install; it does not do the
 first inject. The installer above does that first inject, or do it
