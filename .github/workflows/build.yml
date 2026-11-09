@@ -1,14 +1,14 @@
 name: Build custom Vencord
 
 # This repo holds no Vencord source of its own. The workflow clones
-# upstream Vencord plus the two userplugins, builds once, and publishes
+# upstream Vencord plus the three userplugins, builds once, and publishes
 # the dist files as a rolling "latest" release that the CustomUpdater
 # plugin in the build downloads from.
 #
 # Triggers:
 # - daily schedule: picks up new upstream Vencord commits and new
 #   plugin commits without any manual step. Skips the build entirely
-#   if the three input SHAs are unchanged since the previous published
+#   if the four input SHAs are unchanged since the previous published
 #   build (see the Check for changes step); no rebuild, no republish.
 # - workflow_dispatch: manual run from the Actions tab. Always builds;
 #   a dispatch is an explicit request, so it is not skipped.
@@ -37,7 +37,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Schedule-only skip guard. Compares the three input HEAD SHAs
+      # Schedule-only skip guard. Compares the four input HEAD SHAs
       # (via ls-remote, no clones needed) against the previous published
       # version.json. Unchanged => changed=false, and every later step
       # is skipped, so a no-change day costs one short job, not a full
@@ -53,9 +53,10 @@ jobs:
           VENCORD_SHA=$(git ls-remote https://github.com/Vendicated/Vencord.git HEAD | awk '{print $1}')
           PLUGIN_SHA=$(git ls-remote https://github.com/MrTopQ/customStream-Vencord.git HEAD | awk '{print $1}')
           UPDATER_SHA=$(git ls-remote https://github.com/MLG-SERBUR/vencord-custom-updater.git HEAD | awk '{print $1}')
-          echo "Current SHAs: $VENCORD_SHA $PLUGIN_SHA $UPDATER_SHA"
+          VOICE_SHA=$(git ls-remote https://git.c30.life/ced/voiceSpectrum-Vencord.git HEAD | awk '{print $1}')
+          echo "Current SHAs: $VENCORD_SHA $PLUGIN_SHA $UPDATER_SHA $VOICE_SHA"
           CHANGED=true
-          if [ -s "$PREV_FILE" ] && python3 -c "import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get('vencordSha') == sys.argv[2] and d.get('pluginSha') == sys.argv[3] and d.get('updaterSha') == sys.argv[4] else 1)" "$PREV_FILE" "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" 2>/dev/null; then
+          if [ -s "$PREV_FILE" ] && python3 -c "import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get('vencordSha') == sys.argv[2] and d.get('pluginSha') == sys.argv[3] and d.get('updaterSha') == sys.argv[4] and d.get('voiceSpectrumSha') == sys.argv[5] else 1)" "$PREV_FILE" "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" "$VOICE_SHA" 2>/dev/null; then
             CHANGED=false
           fi
           echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
@@ -87,6 +88,16 @@ jobs:
           repository: MLG-SERBUR/vencord-custom-updater
           ref: main
           path: vencord/src/userplugins/customUpdater.desktop
+
+      # git.c30.life is not GitHub, so actions/checkout cannot fetch it.
+      # Plain git clone instead, same result: plugin folder at
+      # src/userplugins/voiceSpectrum (no suffix, per its README).
+      # Author says it works on Discord web and Vesktop only, not the
+      # official desktop client (native voice engine); it is included
+      # here to test that on desktop anyway, at the user's call.
+      - name: Clone voiceSpectrum plugin
+        if: steps.check.outputs.changed != 'false'
+        run: git clone https://git.c30.life/ced/voiceSpectrum-Vencord.git vencord/src/userplugins/voiceSpectrum
 
       - name: Setup pnpm
         if: steps.check.outputs.changed != 'false'
@@ -134,16 +145,18 @@ jobs:
           VENCORD_SHA=$(git -C vencord rev-parse HEAD)
           PLUGIN_SHA=$(git -C vencord/src/userplugins/customStream rev-parse HEAD)
           UPDATER_SHA=$(git -C vencord/src/userplugins/customUpdater.desktop rev-parse HEAD)
-          VERSION="$(git -C vencord rev-parse --short HEAD)-$(git -C vencord/src/userplugins/customStream rev-parse --short HEAD)-$(git -C vencord/src/userplugins/customUpdater.desktop rev-parse --short HEAD)"
+          VOICE_SHA=$(git -C vencord/src/userplugins/voiceSpectrum rev-parse HEAD)
+          VERSION="$(git -C vencord rev-parse --short HEAD)-$(git -C vencord/src/userplugins/customStream rev-parse --short HEAD)-$(git -C vencord/src/userplugins/customUpdater.desktop rev-parse --short HEAD)-$(git -C vencord/src/userplugins/voiceSpectrum rev-parse --short HEAD)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          python3 - "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" "$VERSION" <<'PYEOF'
+          python3 - "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" "$VOICE_SHA" "$VERSION" <<'PYEOF'
           import json, sys, datetime
-          vencord_sha, plugin_sha, updater_sha, version = sys.argv[1:5]
+          vencord_sha, plugin_sha, updater_sha, voice_sha, version = sys.argv[1:6]
           data = {
               "version": version,
               "vencordSha": vencord_sha,
               "pluginSha": plugin_sha,
               "updaterSha": updater_sha,
+              "voiceSpectrumSha": voice_sha,
               "builtAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "files": [
                   "patcher.js", "preload.js", "renderer.js", "renderer.css",
@@ -192,6 +205,7 @@ jobs:
             echo "Vencord: $(git -C vencord rev-parse HEAD)"
             echo "customStream: $(git -C vencord/src/userplugins/customStream rev-parse HEAD)"
             echo "CustomUpdater: $(git -C vencord/src/userplugins/customUpdater.desktop rev-parse HEAD)"
+            echo "VoiceSpectrum: $(git -C vencord/src/userplugins/voiceSpectrum rev-parse HEAD)"
             echo ""
             echo "Upstream Vencord changes since previous build:"
             echo "$CHANGELOG"
