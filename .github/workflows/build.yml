@@ -53,7 +53,7 @@ jobs:
           VENCORD_SHA=$(git ls-remote https://github.com/Vendicated/Vencord.git HEAD | awk '{print $1}')
           PLUGIN_SHA=$(git ls-remote https://github.com/MrTopQ/customStream-Vencord.git HEAD | awk '{print $1}')
           UPDATER_SHA=$(git ls-remote https://github.com/MLG-SERBUR/vencord-custom-updater.git HEAD | awk '{print $1}')
-          VOICE_SHA=$(git ls-remote https://git.c30.life/ced/voiceSpectrum-Vencord.git HEAD | awk '{print $1}')
+          VOICE_SHA=$(git ls-remote https://github.com/MLG-SERBUR/voiceSpectrum-Vencord.git HEAD | awk '{print $1}')
           echo "Current SHAs: $VENCORD_SHA $PLUGIN_SHA $UPDATER_SHA $VOICE_SHA"
           CHANGED=true
           if [ -s "$PREV_FILE" ] && python3 -c "import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d.get('vencordSha') == sys.argv[2] and d.get('pluginSha') == sys.argv[3] and d.get('updaterSha') == sys.argv[4] and d.get('voiceSpectrumSha') == sys.argv[5] else 1)" "$PREV_FILE" "$VENCORD_SHA" "$PLUGIN_SHA" "$UPDATER_SHA" "$VOICE_SHA" 2>/dev/null; then
@@ -89,15 +89,18 @@ jobs:
           ref: main
           path: vencord/src/userplugins/customUpdater.desktop
 
-      # git.c30.life is not GitHub, so actions/checkout cannot fetch it.
-      # Plain git clone instead, same result: plugin folder at
-      # src/userplugins/voiceSpectrum (no suffix, per its README).
-      # Author says it works on Discord web and Vesktop only, not the
-      # official desktop client (native voice engine); it is included
-      # here to test that on desktop anyway, at the user's call.
-      - name: Clone voiceSpectrum plugin
+      # Fork of ced/voiceSpectrum-Vencord, owned here, trying to make
+      # it work on Discord desktop (native voice engine). Upstream said
+      # web/Vesktop only; desktop showed nothing, so the fork adds
+      # diagnostic logging first — see its FORK.md. No suffix on the
+      # folder, per the plugin's README.
+      - name: Checkout voiceSpectrum plugin (fork)
         if: steps.check.outputs.changed != 'false'
-        run: git clone https://git.c30.life/ced/voiceSpectrum-Vencord.git vencord/src/userplugins/voiceSpectrum
+        uses: actions/checkout@v4
+        with:
+          repository: MLG-SERBUR/voiceSpectrum-Vencord
+          ref: main
+          path: vencord/src/userplugins/voiceSpectrum
 
       - name: Setup pnpm
         if: steps.check.outputs.changed != 'false'

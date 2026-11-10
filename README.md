@@ -10,9 +10,9 @@ the result as a rolling `latest` release.
 - customStream (replaces Discord's stream preview with your own image,
   profiles, slideshow, gallery) — https://github.com/MrTopQ/customStream-Vencord
 - CustomUpdater (the updater plugin) — https://github.com/MLG-SERBUR/vencord-custom-updater
-- VoiceSpectrum (audio visualizer behind speaking users in the voice channel list) — https://git.c30.life/ced/voiceSpectrum-Vencord
+- VoiceSpectrum (audio visualizer behind speaking users in the voice channel list) — fork https://github.com/MLG-SERBUR/voiceSpectrum-Vencord, upstream https://git.c30.life/ced/voiceSpectrum-Vencord
 
-  Its author says it works on Discord web and Vesktop only, not the official desktop client (native voice engine). It is in this build to test that on desktop anyway, at the user's call — if it does nothing on desktop, that is the expected outcome per its README, not a build failure.
+  Its author says it works on Discord web and Vesktop only, not the official desktop client (native voice engine). Desktop showed nothing on 2026-11-10, so the fork is trying to make it work there — first step is diagnostic logging in the fork (see its FORK.md), reporting what the desktop connection actually exposes, before any fix is attempted.
 
 Build command: `pnpm build --standalone --disable-updater`
 
@@ -86,7 +86,7 @@ git clone https://github.com/Vendicated/Vencord
 cd Vencord
 git clone https://github.com/MrTopQ/customStream-Vencord src/userplugins/customStream
 git clone https://github.com/MLG-SERBUR/vencord-custom-updater src/userplugins/customUpdater.desktop
-git clone https://git.c30.life/ced/voiceSpectrum-Vencord src/userplugins/voiceSpectrum
+git clone https://github.com/MLG-SERBUR/voiceSpectrum-Vencord src/userplugins/voiceSpectrum
 pnpm install
 pnpm build --standalone --disable-updater
 pnpm inject
@@ -115,8 +115,9 @@ checkout route above instead.
   `src/userplugins/<name>` and it is included in the next build. If the
   plugin needs a desktop-only gate, use a `.desktop` folder suffix, the
   way CustomUpdater does. If the plugin lives outside GitHub, use a
-  plain `git clone` step instead of `actions/checkout`, the way
-  VoiceSpectrum does — checkout only fetches GitHub repos.
+  plain `git clone` step instead of `actions/checkout` — checkout only
+  fetches GitHub repos. (VoiceSpectrum used to need that, before it was
+  forked to GitHub.)
 - Stock Vencord settings and cloud sync are untouched by all of this:
   settings live outside the dist folder, and a rebuild/inject does not
   wipe them. Cloud sync moves settings, not plugin code — another device
